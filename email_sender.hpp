@@ -160,18 +160,20 @@ private:
 		process_content();
 	}
 	void  process_content() {
-		std::stringstream boundary;
-		boundary << "\n--" << boundary_ << "\n";
-		write(boundary.str());
-		std::stringstream content_type;
-		content_type << "Content-Type:" << msg_.content_type_ << "\n";
-		write(content_type.str());
-		std::stringstream Version;
-		Version << "MIME-Version:" << mimeVersion << "\n";
-		write(Version.str());
-		std::stringstream content;
-		content << "\n" << msg_.content_ << CRLF;
-		write(content.str());
+		if (!msg_.content_.empty()) {
+			std::stringstream boundary;
+			boundary << "\n--" << boundary_ << "\n";
+			write(boundary.str());
+			std::stringstream content_type;
+			content_type << "Content-Type:" << msg_.content_type_ << "\n";
+			write(content_type.str());
+			std::stringstream Version;
+			Version << "MIME-Version:" << mimeVersion << "\n";
+			write(Version.str());
+			std::stringstream content;
+			content << "\n" << msg_.content_ << CRLF;
+			write(content.str());
+		}
 		attachment();
 	}
 	void attachment() {

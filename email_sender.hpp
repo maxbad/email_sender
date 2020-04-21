@@ -185,7 +185,7 @@ private:
 				boundary << "\n--" << boundary_ << "\n";
 				write(boundary.str());
 				std::stringstream content_type;
-				content_type << "Content-Type: text/plain" << "\n";
+				content_type << "Content-Type: "<<"text/plain" << "\n";
 				write(content_type.str());
 				std::stringstream Version;
 				Version << "MIME-Version:" << mimeVersion << "\n";

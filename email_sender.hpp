@@ -212,10 +212,10 @@ private:
 				//write("Content-Transfer-Encoding: base64\r\n");
 				attachment_property << "Content-Transfer-Encoding: base64" << CRLF;
 				//std::stringstream Disposition;
-				attachment_property << "Content-Disposition: attachment; filename=" << filename << CRLF<< CRLF;
+				attachment_property << "Content-Disposition: attachment; filename=\"" << filename<<"\"" << CRLF<< CRLF;
 				//write(Disposition.str());
 				write(attachment_property.str());
-				char buff[128] = { 0 };
+				char buff[64] = { 0 };
 				for (;;) {
 					fin.read(buff, sizeof(buff));
 					auto size = fin.gcount();

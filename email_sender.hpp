@@ -2,6 +2,7 @@
 #include <asio.hpp>
 #include <string>
 #include <fstream>
+#include <ctime>
 struct email_msg {
 	std::string host_;
 	std::string port_;
@@ -84,9 +85,17 @@ private:
 	}
 
 	static std::string to_base64(std::string const& src) {
-		char buff[1024];
+		char buff[1024] = {0};
 		auto size = base64_encode(buff, src.data(), src.size(), 0);
 		return std::string(buff, size);
+	}
+public:
+	static std::string get_gmt_time_str(std::time_t t)
+	{
+		struct tm* GMTime = gmtime(&t);
+		char buff[512] = { 0 };
+		strftime(buff, sizeof(buff), "%a, %d %b %Y %H:%M:%S +0000", GMTime);
+		return buff;
 	}
 private:
 	std::string reader() {
@@ -107,23 +116,20 @@ private:
 	void communicate() {
 		std::cout << reader() << std::endl;
 		std::stringstream ss;
-		ss << "HELO " << msg_.user_name_ << CRLF;
+		ss << "EHLO " << msg_.user_name_ << CRLF;
 		write(ss.str());
 		std::cout << reader() << std::endl;
 		login();
 	}
 	void login() {
 		std::stringstream ss;
-		ss << "AUTH LOGIN" << CRLF;
+		std::string token;
+		token.push_back('\0');
+		token.append(msg_.user_name_);
+		token.push_back('\0');
+		token.append(msg_.user_pass_);
+		ss << "AUTH PLAIN "<<to_base64(token) << CRLF;
 		write(ss.str());
-		std::cout << reader() << std::endl;
-		std::stringstream userName;
-		userName << to_base64(msg_.user_name_) << CRLF;
-		write(userName.str());
-		std::cout << reader() << std::endl;
-		std::stringstream passWord;
-		passWord << to_base64(msg_.user_pass_) << CRLF;
-		write(passWord.str());
 		std::cout << reader() << std::endl;
 		constructor_mail();
 	}
@@ -142,36 +148,44 @@ private:
 		write(DATA.str());
 		std::cout << reader() << std::endl;
 		std::stringstream Header;
-		Header << "Content-Type:multipart/mixed;\n boundary=\"" << boundary_ << "\"" << CRLF;
+		Header << "Content-Type: multipart/mixed; boundary=\"" << boundary_ << "\"" << CRLF;
 		write(Header.str());
+
+		// email 正文
+		std::stringstream from;
+		from << "From: " << msg_.user_name_ << CRLF;
+		write(from.str());
+		std::stringstream to;
+		to << "To: " << msg_.reciper_ << CRLF;
+		write(to.str());
+		std::stringstream subject;  //标题
+		subject << "Subject: " << msg_.subject_ << CRLF;
+		write(subject.str());
+		std::stringstream messageId;
+		auto pos = msg_.user_name_.find("@");
+		auto postFix = msg_.user_name_.substr(pos, msg_.user_name_.size() - pos);
+		messageId << "Message-ID: <" << to_base64(std::to_string(std::time(nullptr))) << "-" << "abcde" << postFix << ">" << CRLF;
+		write(messageId.str());
+		write("Date: " + get_gmt_time_str(std::time(nullptr)) + CRLF);
 		std::stringstream Version;
 		Version << "MIME-Version: " << mimeVersion << CRLF;
 		write(Version.str());
-		// email 正文
-		std::stringstream from;
-		from << "From:" << msg_.user_name_ << CRLF;
-		write(from.str());
-		std::stringstream to;
-		to << "To:" << msg_.reciper_ << CRLF;
-		write(to.str());
-		std::stringstream subject;  //标题
-		subject << "Subject:" << msg_.subject_ << CRLF;
-		write(subject.str());
+		write(CRLF);
 		process_content();
 	}
 	void  process_content() {
 		if (!msg_.content_.empty()) {
 			std::stringstream boundary;
-			boundary << "\n--" << boundary_ << "\n";
+			boundary << "--" << boundary_ << CRLF;
 			write(boundary.str());
 			std::stringstream content_type;
-			content_type << "Content-Type:" << msg_.content_type_ << "\n";
+			content_type << "Content-Type:" << msg_.content_type_ << CRLF;
 			write(content_type.str());
-			std::stringstream Version;
-			Version << "MIME-Version:" << mimeVersion << "\n";
-			write(Version.str());
+			std::stringstream Encoding;
+			Encoding << "Content-Transfer-Encoding: 7bit"<< CRLF<< CRLF;
+			write(Encoding.str());
 			std::stringstream content;
-			content << "\n" << msg_.content_ << CRLF;
+			content << msg_.content_;
 			write(content.str());
 		}
 		attachment();
@@ -184,17 +198,14 @@ private:
 			std::ifstream fin(filepath.c_str(), std::ios::binary);
 			if (fin.is_open()) {
 				std::stringstream boundary;
-				boundary << "\n--" << boundary_ << "\n";
+				boundary<< CRLF << "--" << boundary_ << CRLF;
 				write(boundary.str());
 				std::stringstream content_type;
-				content_type << "Content-Type: "<<"text/plain" << "\n";
+				content_type << "Content-Type: " << "text/plain"<<"; name="<< filename << CRLF;
 				write(content_type.str());
-				std::stringstream Version;
-				Version << "MIME-Version:" << mimeVersion << "\n";
-				write(Version.str());
-				write("Content-Transfer-Encoding: base64\n");
+				write("Content-Transfer-Encoding: base64\r\n");
 				std::stringstream Disposition;
-				Disposition << "Content-Disposition: attachment; filename=\"" << filename << "\"\n\n";
+				Disposition << "Content-Disposition: attachment; filename=" << filename << CRLF<< CRLF;
 				write(Disposition.str());
 				char buff[128] = { 0 };
 				for (;;) {
@@ -208,14 +219,14 @@ private:
 						break;
 					}
 				}
-				write(CRLF);
+				//write(CRLF);
 			}
 		}
 		end();
 	}
 	void end() {
 		std::stringstream boundary_end;
-		boundary_end << "\n--" << boundary_ << "--\n" << CRLF;
+		boundary_end << CRLF << "--" << boundary_ << "--" << CRLF;
 		write(boundary_end.str());
 		std::stringstream rowEnd;
 		rowEnd << CRLF << "." << CRLF;
